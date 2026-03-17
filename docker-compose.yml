@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  nats:
+    image: nats:alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["-js"]
+    networks:
+      - ai-network
+
+  postgres:
+    image: ankane/pgvector:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: supersecretpassword
+      POSTGRES_DB: saas_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ai-network
+
+  ingress-gateway:
+    build: 
+      context: ./ingress
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      - nats
+    networks:
+      - ai-network
+
+  ai-brain:
+    build:
+      context: ./ai-brain
+      dockerfile: Dockerfile
+    environment:
+      - NATS_URL=nats://nats:4222
+      - DATABASE_URL=postgresql://postgres:supersecretpassword@postgres:5432/saas_db
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    depends_on:
+      - nats
+      - postgres
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    driver: bridge
+
+volumes:
+  pgdata:
